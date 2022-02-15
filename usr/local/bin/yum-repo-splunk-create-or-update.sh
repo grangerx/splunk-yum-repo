@@ -11,8 +11,16 @@ PASSFILESPEC=/root/.yum-repo-splunk
 USER=PUTSPLUNKDOTCOMUSERNAMEHERE
 PASS=PUTSPLUNKDOTCOMPASSWORDHERE
 # -^- Content of file ${PASSFILESPEC} should be
-source ${PASSFILESPEC}
-if [ -z "${USER}" || -z "${PASS}" ]; then
+
+#Source the ${PASSFILESPEC} file if it exists, otherwise warn and exit:
+if [ -f "${PASSFILESPEC}" ]; then
+	source ${PASSFILESPEC}
+else
+	echo "File $PASSFILESPEC was not found. Please create file, containing USER= and PASS= lines, then run the script again."
+fi
+
+#Ensure that the USER and PASS variables exist and are set, otherwise warn and exit:
+if [[ -z "${USER}" || -z "${PASS}" ]]; then
 	echo "USER or PASS variable is unset."
 	echo "Please create file ${PASSFILESPEC} containing these variable declarations."
 	exit 1 

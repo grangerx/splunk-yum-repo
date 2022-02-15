@@ -1,0 +1,9 @@
+##----------------------------------------------------------
+## -v- Daily Splunk RPM Repo update each morning, with email report
+##----------------------------------------------------------
+0 3 * * * root /usr/local/bin/yum-repo-splunk-create-or-update.sh | mail -s "Splunk YUM Repo Update : $(hostname -f)" root
+##----------------------------------------------------------
+## -^- Daily Splunk RPM Repo update each morning, with email report
+##----------------------------------------------------------
+
+

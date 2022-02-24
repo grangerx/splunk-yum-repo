@@ -1,9 +1,25 @@
 #!/bin/bash 
 #File: yum-repo-splunk-create-or-update.sh
-#Author: grangerx (grangerx@grangerx.com)
-#Version: 2022.02.15.A
+#Author: Justin Hochstetler (justin@grangerx.com)
+#Version: 2022.02.24.A
 
 PASSFILESPEC=/root/.yum-repo-splunk
+
+SYSLOGLEVEL=5
+#syslog severity levels borrowed from solarwinds list.
+#VALUE	SEVERITY	KEYWORD	DESCRIPTION
+#0	Emergency	emerg	System is unusable
+#1	Alert		alert	Should be corrected immediately
+#2	Critical	crit	Critical conditions	
+#3	Error		err	Error conditions
+#4	Warning		warning	May indicate that an error will occur if action is not taken.
+#5	Notice		notice	Events that are unusual, but not error conditions.	 
+#6	Informational	info	Normal operational messages that require no action.
+#7	Debug		debug	Information useful to developers for debugging the application.	 
+BUFFER_EMERG=""; BUFFER_ALERT=""; BUFFER_CRIT=""; BUFFER_ERROR=""; BUFFER_WARNING=""; BUFFER_NOTICE=""; BUFFER_INFO=""; BUFFER_DEBUG=""
+
+#a separate buffer, to collect everything that needs to be summarized.
+BUFFER_SUMMARY=""
 
 #For Username and Password, place those in a file at path ${PASSFILESPEC}
 #NOTE: For the USER and PASS, use the ones that have been registered with www.splunk.com, to allow downloads of their packages:
@@ -12,7 +28,7 @@ USER=PUTSPLUNKDOTCOMUSERNAMEHERE
 PASS=PUTSPLUNKDOTCOMPASSWORDHERE
 # -^- Content of file ${PASSFILESPEC} should be
 source ${PASSFILESPEC}
-if [ -z "${USER}" || -z "${PASS}" ]; then
+if [[ -z "${USER}" || -z "${PASS}" ]]; then
 	echo "USER or PASS variable is unset."
 	echo "Please create file ${PASSFILESPEC} containing these variable declarations."
 	exit 1 
@@ -26,6 +42,70 @@ SPLUNK_REPO_PATH_BASE="/opt/yumrepos/splunk"
 
 
 #---------------------------------------
+#-v- function fnBUFFER
+#---------------------------------------
+function fnBUFFER() {
+	local msglevel="${1}"
+	local includeinsummary="${2}"
+	local content="${3}"
+	local msglvlnum=7
+
+#BUFFER_EMERG=""; BUFFER_ALERT=""; BUFFER_CRIT=""; BUFFER_ERROR=""; BUFFER_WARNING=""; BUFFER_NOTICE=""; BUFFER_INFO=""; BUFFER_DEBUG=""
+	case "${msglevel}" in
+		"DEBUG")
+			msglvlnum=7
+			BUFFER_DEBUG+="${content}\n"
+			;;
+		"INFO")
+			msglvlnum=6
+			BUFFER_INFO+="${content}\n"
+			;;
+		"NOTICE")
+			msglvlnum=5
+			BUFFER_NOTICE+="${content}\n"
+			;;
+		"WARNING")
+			msglvlnum=4
+			BUFFER_WARNING+="${content}\n"
+			;;
+		"ERROR")
+			msglvlnum=3
+			BUFFER_ERROR+="${content}\n"
+			;;
+		"CRIT")
+			msglvlnum=2
+			BUFFER_CRIT+="${content}\n"
+			;;
+		"ALERT")
+			msglvlnum=1
+			BUFFER_ALERT+="${content}\n"
+			;;
+		"EMERG")
+			msglvlnum=0
+			BUFFER_EMERG+="${content}\n"
+			;;
+		*)
+			msglvlnum=5
+			BUFFER_NOTICE+="${content}\n"
+			;;
+	esac
+	
+	if [ "${includeinsummary}" -eq 1 ]; then
+		BUFFER_SUMMARY+="${content}\n"
+	fi
+
+	#if msglevel is lt/equal to defined SYSLOGLEVEL, echo the message:
+	if [ "${msglvlnum}" -le "${SYSLOGLEVEL}" ]; then
+		echo "${content}"
+	fi
+}
+#---------------------------------------
+#-^- function fnBUFFER
+#---------------------------------------
+
+
+
+#---------------------------------------
 #-v- function fnCHECKUTIL
 #---------------------------------------
 function fnCHECKUTIL() {
@@ -33,8 +113,8 @@ function fnCHECKUTIL() {
 	local utilname="${2}"
 	local fixtextblurb="${3}"
 	if [ ! -f "${utilpath}" ]; then
-	echo "ERROR: The '${utilname}' executable must be available for this script to function."
-	echo "NOTE: Issue the command '${fixtextblurb}' to install the utility."
+	fnBUFFER ERROR 1 "ERROR: The '${utilname}' executable must be available for this script to function."
+	fnBUFFER ERROR 1 "NOTE: Issue the command '${fixtextblurb}' to install the utility."
 	exit 1
 	fi
 }
@@ -52,8 +132,6 @@ fnCHECKUTIL "/usr/bin/sha512sum" "sha512sum" "#yum install coreutils"
 fnCHECKUTIL "/bin/curl" "curl" "#yum install curl"
 
 
-declare -a ERRORS
-
 #declare an associative array where each key is the repo name/dir and the value is the url to download from:
 declare -A SPLUNK_RPM_HTTP_DL_URL
 SPLUNK_RPM_HTTP_DL_URL+=([splunk-enterprise]="https://www.splunk.com/en_us/download/splunk-enterprise.html#")
@@ -66,8 +144,11 @@ SPLUNK_RPM_HTTP_DL_URL+=([splunk-universal-forwarder]="https://www.splunk.com/en
 # finish function - this is called when the script exits
 #---------------------------------------
 function finish() {
-	echo "Cleanup: Deleting temp directory: ${SPLUNK_DL_TEMP_LOC}"
+	fnBUFFER DEBUG 0 "Cleanup: Deleting temp directory: ${SPLUNK_DL_TEMP_LOC}"
 	rmdir "${SPLUNK_DL_TEMP_LOC}"
+	echo '----'
+	echo -e "SUMMARY:"
+	echo -e "${BUFFER_SUMMARY}"
 }
 #---------------------------------------
 #-^- function finish
@@ -86,11 +167,11 @@ function fnCreateDir() {
 	local l_dir="${1}"
 	local l_desc="${2}"
 	if [ ! -d ${l_dir} ]; then
-		echo "${l_desc}: ${l_dir} : Does Not Exist" 
-		echo "${l_desc}: ${l_dir} : Creating Directory" 
+		fnBUFFER INFO 0 "${l_desc}: ${l_dir} : Does Not Exist" 
+		fnBUFFER INFO 0 "${l_desc}: ${l_dir} : Creating Directory" 
 		mkdir -p "${l_dir}"
 	else
-		echo "${l_desc}: ${l_dir} : Already Exists" 
+		fnBUFFER INFO 0 "${l_desc}: ${l_dir} : Already Exists" 
 	fi # if directory doesn't exist
 
 }
@@ -103,28 +184,32 @@ function fnGetThePkg() {
 	local checksum_remote="${4}"
 	local temp_fpspec="${SPLUNK_DL_TEMP_LOC}/${dl_rpm_name}"
 
-	echo "Downloading file to temporary location: ${temp_fpspec}"
+	fnBUFFER INFO 0 "${repo_name}: Downloading file to temporary location: ${temp_fpspec}"
 
 	DL_RES=$( fnDownloadFile "${dl_link}" "${SPLUNK_DL_TEMP_LOC}" )
 	#echo "Checking local file checksum:"
 	local checksum_local=$( cd ${SPLUNK_DL_TEMP_LOC} ; sha512sum -b "${dl_rpm_name}" | sed -e "s/^\(.*\) \*\(.*\)/SHA512(\2)= \1/g" )
 	#Check the SHA512 checksum:
 	if [ "${checksum_remote}" == "${checksum_local}" ]; then
-		echo "Local file matches expected checksum: ${temp_fpspec}"
-		echo "Moving file to final location: ${SPLUNK_REPO_PATH_BASE}/${repo_name}"
+		fnBUFFER INFO 1 "${repo_name}: Remote file downloaded and checksum validated: ${temp_fpspec}"
+		fnBUFFER INFO 0 "${repo_name}: Moving file to final location: ${SPLUNK_REPO_PATH_BASE}/${repo_name}"
 		mv "${SPLUNK_DL_TEMP_LOC}/${dl_rpm_name}" "${SPLUNK_REPO_PATH_BASE}/${repo_name}"
 		return 0
 	else
-		echo "Checksum for : ${temp_fpspec} :: FAILED"
+		fnBUFFER ERROR 1 "${repo_name}: Downloaded file Checksum for : ${temp_fpspec} :: FAILED"
+		fnBUFFER ERROR 1 "${repo_name}: Local file expected checksum for : ${temp_fpspec} :: ${checksum_remote}"
+		fnBUFFER ERROR 1 "${repo_name}: Local file   actual checksum for : ${temp_fpspec} :: ${checksum_local}"
 		return 1
 	fi
 }
 
-
 # -v- Main:
+
 
 #create the temp dl path if it doesn't exist:
 fnCreateDir "${SPLUNK_DL_TEMP_LOC}" "Temp file Download Folder"
+
+#Trap EXIT to display summary and do cleanup:
 trap finish EXIT
 
 #create the directory if it doesn't exist:
@@ -133,12 +218,12 @@ fnCreateDir "${SPLUNK_REPO_PATH_BASE}" "File Repositories BasePath"
 #for each dl_url, process the url, find the true url, and download it.
 for repo_name in "${!SPLUNK_RPM_HTTP_DL_URL[@]}"
 do
-	echo "Processing repo: ${repo_name}"
+	fnBUFFER INFO 0 "${repo_name}: Processing repo"
 	dl_url="${SPLUNK_RPM_HTTP_DL_URL[${repo_name}]}"
 	repo_path="${SPLUNK_REPO_PATH_BASE}/${repo_name}"
 	repo_config_fp_spec="${SPLUNK_REPO_CONFIG_DIR_PATH}/${repo_name}.repo"
 
-	fnCreateDir "${repo_path}" "File Repository Path for ${repo_name}"
+	fnCreateDir "${repo_path}" "${repo_name}: File Repository Path"
 
 	#get the content of the page of the url:
 	DL_PAGE_CONTENT=$( curl --user ${USER}:${PASS} -s "${dl_url}" )
@@ -151,7 +236,7 @@ do
 		
 	#get the count of DL links and display it, just to give some info on what is being seen by the script.
 	DL_LINKS_COUNT=${#DL_LINKS[@]} ; CHECKSUM_LINKS_COUNT=${#CHECKSUM_LINKS[@]} 
-	echo "Packages found on remote site for ${repo_name}: ${DL_LINKS_COUNT}"
+	fnBUFFER INFO 1 "${repo_name}: Pkgs found on remote site: ${DL_LINKS_COUNT}"
 
 
 	#take the count of links, and use a for loop to iterate
@@ -175,41 +260,53 @@ do
 
 		#check if the file has already been successfully downloaded:
 		if [ -f ${this_pkg_rpm_final_fpspec} ]; then
-			echo "Local file already exists: ${this_pkg_rpm_final_fpspec}"
+			fnBUFFER INFO 0 "Local file already exists: ${this_pkg_rpm_final_fpspec}"
 			#if downloaded, check the checksum:
 			sha512_local=$( cd ${repo_path} ; sha512sum -b "${dl_rpm_name}" | sed -e "s/^\(.*\) \*\(.*\)/SHA512(\2)= \1/g" )
 			if [ "${checksum_remote}" == "${sha512_local}" ]; then
-				echo "Local file matches given remote checksum: ${this_pkg_rpm_final_fpspec}"
+				fnBUFFER INFO 0 "${repo_name}: Local file matches given remote checksum: ${this_pkg_rpm_final_fpspec}"
+				fnBUFFER INFO 1 "${repo_name}: Already have file: ${sha512_local}"
 			else
-				echo "Local file DOES NOT match expected checksum: ${this_pkg_rpm_final_fpspec}"
+				fnBUFFER INFO 1 "${repo_name}: Local file DOES NOT match expected checksum: ${this_pkg_rpm_final_fpspec}"
 				fnGetThePkg "${repo_name}" "${dl_link}" "${dl_rpm_name}" "${checksum_remote}"
 			fi
 		else
-			echo "Local file does not exist."
+			fnBUFFER INFO 0 "${repo_name}: Local file does not exist."
 			fnGetThePkg "${repo_name}" "${dl_link}" "${dl_rpm_name}" "${checksum_remote}"
 		fi
 	done
 
 
 	#process any files in the final repo location:
-	echo "Create Repo: Executing for: ${repo_name}"
+	fnBUFFER INFO 0 "${repo_name}: Create Repo: Executing."
 	#create the yum repo metadata:
-	/bin/createrepo --update "${repo_path}"
-	echo "Create Repo: Finished for: ${repo_name}"
-	echo ""
+
+	CREATEREPO_OUTPUT="$(/bin/createrepo --update "${repo_path}")"
+	fnBUFFER DEBUG 0 "${CREAREREPO_OUTPUT}"
+	fnBUFFER INFO 1 "${repo_name}: Create Repo: Finished."
 
 
 	#if the repo file doesn't exist, create it:
 	if [ ! -f ${repo_config_fp_spec} ]; then
-	echo "Setting up the repo configuration file for: ${repo_name}"
-	cat <<- EO1STF > ${repo_config_fp_spec}
-	[${repo_name}]
-	name=Splunk Software Repository - ${repo_name}
-	baseurl=file://${repo_path}/
-	enabled=1
-	gpgcheck=0
-	EO1STF
+		fnBUFFER INFO 0 "${repo_name}: Setting up the repo configuration file."
+		cat <<- EO1STF > ${repo_config_fp_spec}
+		[${repo_name}]
+		name=Splunk Software Repository - ${repo_name}
+		baseurl=file://${repo_path}/
+		enabled=1
+		gpgcheck=0
+		EO1STF
+		fnBUFFER INFO 1 "${repo_name}: Set up the repo configuration file."
 	fi
 
+		fnBUFFER INFO 1 "--------"
 done
 
+#echo -e "DEBUG: ${BUFFER_DEBUG}"
+#echo -e "INFO: ${BUFFER_INFO}"
+#echo -e "NOTICE: ${BUFFER_NOTICE}"
+#echo -e "WARNING: ${BUFFER_WARNING}"
+#echo -e "ERROR: ${BUFFER_ERROR}"
+#echo -e "CRIT: ${BUFFER_CRIT}"
+#echo -e "ALERT: ${BUFFER_ALERT}"
+#echo -e "EMERG: ${BUFFER_EMERG}"

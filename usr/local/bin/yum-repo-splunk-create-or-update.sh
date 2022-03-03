@@ -3,7 +3,7 @@
 #Author: Justin Hochstetler (justin@grangerx.com)
 #Version: 2022.02.24.A
 
-PASSFILESPEC=/root/.yum-repo-splunk
+PASSFILESPEC=~/.yum-repo-splunk
 
 SYSLOGLEVEL=5
 #syslog severity levels borrowed from solarwinds list.
@@ -22,16 +22,31 @@ BUFFER_EMERG=""; BUFFER_ALERT=""; BUFFER_CRIT=""; BUFFER_ERROR=""; BUFFER_WARNIN
 BUFFER_SUMMARY=""
 
 #For Username and Password, place those in a file at path ${PASSFILESPEC}
-#NOTE: For the USER and PASS, use the ones that have been registered with www.splunk.com, to allow downloads of their packages:
+#NOTE: For the SPLUNKUSER and SPLUNKPASS, use the ones that have been registered with www.splunk.com, to allow downloads of their packages:
 # -v- Content of file ${PASSFILESPEC} should be
-USER=PUTSPLUNKDOTCOMUSERNAMEHERE
-PASS=PUTSPLUNKDOTCOMPASSWORDHERE
+SPLUNKUSER=PUTSPLUNKDOTCOMUSERNAMEHERE
+SPLUNKPASS=PUTSPLUNKDOTCOMPASSWORDHERE
 # -^- Content of file ${PASSFILESPEC} should be
-source ${PASSFILESPEC}
-if [[ -z "${USER}" || -z "${PASS}" ]]; then
-	echo "USER or PASS variable is unset."
-	echo "Please create file ${PASSFILESPEC} containing these variable declarations."
+
+#Source the file if it exists:
+if [ -f ${PASSFILESPEC} ]; then
+	echo "Sourcing ${PASSFILESPEC}"
+	source ${PASSFILESPEC}
+else
+	echo "Please validate that file ${PASSFILESPEC} exists, and contains lines for SPLUNKUSER= and SPLUNKPASS= ."
+fi
+
+#Validate that the sourced file did set SPLUNKUSER and SPLUNKPASS variables:
+if [[ -z "${SPLUNKUSER}" || -z "${SPLUNKPASS}" ]]; then
+	echo "SPLUNKUSER or SPLUNKPASS variable is unset."
+	echo "Please validate that file ${PASSFILESPEC} exists, and contains lines for SPLUNKUSER= and SPLUNKPASS= ."
 	exit 1 
+fi
+
+#Validate that the sourced file is not using the dummy values, though:
+if [[ "${SPLUNKUSER}" == "PUTSPLUNKDOTCOMUSERNAMEHERE" || "${SPLUNKPASS}" == "PUTSPLUNKDOTCOMPASSWORDHERE" ]]; then
+	echo "SPLUNKUSER or SPLUNKPASS in ${PASSFILESPEC} is not properly set."
+	exit 1
 fi
 
 DATE_SPEC="$( date +%Y%m%d-%H%M%S )"
@@ -158,7 +173,7 @@ function finish() {
 function fnDownloadFile() {
 	l_link="${1}"
 	l_path="${2}"
-	$( cd ${l_path} ; curl --user ${USER}:${PASS} -O -s "${l_link}" )
+	$( cd ${l_path} ; curl --user ${SPLUNKUSER}:${SPLUNKPASS} -O -s "${l_link}" )
 	return $?
 }
 
@@ -227,7 +242,7 @@ do
 	fnCreateDir "${repo_path}" "${repo_name}: File Repository Path"
 
 	#get the content of the page of the url:
-	DL_PAGE_CONTENT=$( curl --user ${USER}:${PASS} -s "${dl_url}" )
+	DL_PAGE_CONTENT=$( curl --user ${SPLUNKUSER}:${SPLUNKPASS} -s "${dl_url}" )
 
 
 	#parse the actual package(s) and checksum(s) download location(s) from the page content:
@@ -257,7 +272,7 @@ do
 		#sha512_link="${dl_link}.sha512"
 
 		#download the checksum file for the file:
-		checksum_remote=$( curl --user ${USER}:${PASS} -s "${checksum_link}" )
+		checksum_remote=$( curl --user ${SPLUNKUSER}:${SPLUNKPASS} -s "${checksum_link}" )
 
 		#check if the file has already been successfully downloaded:
 		if [ -f ${this_pkg_rpm_final_fpspec} ]; then

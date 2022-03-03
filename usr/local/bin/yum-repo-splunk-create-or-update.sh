@@ -30,7 +30,7 @@ SPLUNKPASS=PUTSPLUNKDOTCOMPASSWORDHERE
 
 #Source the file if it exists:
 if [ -f ${PASSFILESPEC} ]; then
-	echo "Sourcing ${PASSFILESPEC}"
+	#echo "Sourcing ${PASSFILESPEC}"
 	source ${PASSFILESPEC}
 else
 	echo "Please validate that file ${PASSFILESPEC} exists, and contains lines for SPLUNKUSER= and SPLUNKPASS= ."

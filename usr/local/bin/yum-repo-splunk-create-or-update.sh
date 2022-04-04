@@ -20,6 +20,7 @@ BUFFER_EMERG=""; BUFFER_ALERT=""; BUFFER_CRIT=""; BUFFER_ERROR=""; BUFFER_WARNIN
 
 #a separate buffer, to collect everything that needs to be summarized.
 BUFFER_SUMMARY=""
+BUFFER_SUMMARY_DETAIL=""
 
 #For Username and Password, place those in a file at path ${PASSFILESPEC}
 #NOTE: For the SPLUNKUSER and SPLUNKPASS, use the ones that have been registered with www.splunk.com, to allow downloads of their packages:
@@ -61,7 +62,7 @@ SPLUNK_REPO_PATH_BASE="/opt/yumrepos/splunk"
 #---------------------------------------
 function fnBUFFER() {
 	local msglevel="${1}"
-	local includeinsummary="${2}"
+	local bitfield_includeinsummary="${2}"
 	local content="${3}"
 	local msglvlnum=7
 
@@ -105,8 +106,14 @@ function fnBUFFER() {
 			;;
 	esac
 	
-	if [ "${includeinsummary}" -eq 1 ]; then
+	#bitfield_includeinsummary is interpreted as a bitfield
+	# 0x1 - include in summary
+	if [ "$(( ${bitfield_includeinsummary} & 0x1 ))" -eq 1 ]; then
 		BUFFER_SUMMARY+="${content}\n"
+	fi
+	# 0x2 - include in summary detail
+	if [ "$(( ${bitfield_includeinsummary} & 0x2 ))" -eq 2 ]; then
+		BUFFER_SUMMARY_DETAIL+="${content}\n"
 	fi
 
 	#if msglevel is lt/equal to defined SYSLOGLEVEL, echo the message:
@@ -128,8 +135,8 @@ function fnCHECKUTIL() {
 	local utilname="${2}"
 	local fixtextblurb="${3}"
 	if [ ! -f "${utilpath}" ]; then
-	fnBUFFER ERROR 1 "ERROR: The '${utilname}' executable must be available for this script to function."
-	fnBUFFER ERROR 1 "NOTE: Issue the command '${fixtextblurb}' to install the utility."
+	fnBUFFER ERROR 3 "ERROR: The '${utilname}' executable must be available for this script to function."
+	fnBUFFER ERROR 3 "NOTE: Issue the command '${fixtextblurb}' to install the utility."
 	exit 1
 	fi
 }
@@ -162,8 +169,11 @@ function finish() {
 	fnBUFFER DEBUG 0 "Cleanup: Deleting temp directory: ${SPLUNK_DL_TEMP_LOC}"
 	rmdir "${SPLUNK_DL_TEMP_LOC}"
 	echo '----'
-	echo -e "SUMMARY:"
+	echo -e "Summary:"
 	echo -e "${BUFFER_SUMMARY}"
+	echo '----'
+	echo -e "Summary Detail:"
+	echo -e "${BUFFER_SUMMARY_DETAIL}"
 }
 #---------------------------------------
 #-^- function finish
@@ -209,12 +219,12 @@ function fnGetThePkg() {
 		fnBUFFER INFO 0 "${repo_name}: Remote file downloaded and checksum validated: ${temp_fpspec}"
 		fnBUFFER INFO 0 "${repo_name}: Moving file to final location: ${SPLUNK_REPO_PATH_BASE}/${repo_name}"
 		mv "${SPLUNK_DL_TEMP_LOC}/${dl_rpm_name}" "${SPLUNK_REPO_PATH_BASE}/${repo_name}"
-		fnBUFFER INFO 1 "${repo_name}: File Downloaded: ${checksum_local}"
+		fnBUFFER INFO 3 "${repo_name}: File Downloaded: ${checksum_local}"
 		return 0
 	else
-		fnBUFFER ERROR 1 "${repo_name}: Downloaded file Checksum for : ${temp_fpspec} :: FAILED"
-		fnBUFFER ERROR 1 "${repo_name}: Local file expected checksum for : ${temp_fpspec} :: ${checksum_remote}"
-		fnBUFFER ERROR 1 "${repo_name}: Local file   actual checksum for : ${temp_fpspec} :: ${checksum_local}"
+		fnBUFFER ERROR 3 "${repo_name}: Downloaded file Checksum for : ${temp_fpspec} :: FAILED"
+		fnBUFFER ERROR 2 "${repo_name}: Local file expected checksum for : ${temp_fpspec} :: ${checksum_remote}"
+		fnBUFFER ERROR 2 "${repo_name}: Local file   actual checksum for : ${temp_fpspec} :: ${checksum_local}"
 		return 1
 	fi
 }
@@ -252,7 +262,7 @@ do
 		
 	#get the count of DL links and display it, just to give some info on what is being seen by the script.
 	DL_LINKS_COUNT=${#DL_LINKS[@]} ; CHECKSUM_LINKS_COUNT=${#CHECKSUM_LINKS[@]} 
-	fnBUFFER INFO 1 "${repo_name}: Pkgs found on remote site: ${DL_LINKS_COUNT}"
+	fnBUFFER INFO 3 "${repo_name}: Pkgs found on remote site: ${DL_LINKS_COUNT}"
 
 
 	#take the count of links, and use a for loop to iterate
@@ -281,9 +291,10 @@ do
 			checksum_local=$( cd ${repo_path} ; sha512sum -b "${dl_rpm_name}" | sed -e "s/^\(.*\) \*\(.*\)/SHA512(\2)= \1/g" )
 			if [ "${checksum_remote}" == "${checksum_local}" ]; then
 				fnBUFFER INFO 0 "${repo_name}: Local file matches given remote checksum: ${this_pkg_rpm_final_fpspec}"
-				fnBUFFER INFO 1 "${repo_name}: Already have file: ${checksum_local}"
+				fnBUFFER INFO 1 "${repo_name}: Already have file: ${dl_rpm_name}"
+				fnBUFFER INFO 2 "${repo_name}: Already have file: ${checksum_local}"
 			else
-				fnBUFFER INFO 1 "${repo_name}: Local file DOES NOT match expected checksum: ${this_pkg_rpm_final_fpspec}"
+				fnBUFFER INFO 2 "${repo_name}: Local file DOES NOT match expected checksum: ${this_pkg_rpm_final_fpspec}"
 				fnGetThePkg "${repo_name}" "${dl_link}" "${dl_rpm_name}" "${checksum_remote}"
 			fi
 		else
@@ -299,7 +310,7 @@ do
 
 	CREATEREPO_OUTPUT="$(/bin/createrepo --update "${repo_path}")"
 	fnBUFFER DEBUG 0 "${CREAREREPO_OUTPUT}"
-	fnBUFFER INFO 1 "${repo_name}: Create Repo: Finished."
+	fnBUFFER INFO 2 "${repo_name}: Create Repo: Finished."
 
 
 	#if the repo file doesn't exist, create it:
@@ -312,10 +323,10 @@ do
 		enabled=1
 		gpgcheck=0
 		EO1STF
-		fnBUFFER INFO 1 "${repo_name}: Set up the repo configuration file."
+		fnBUFFER INFO 3 "${repo_name}: Set up the repo configuration file."
 	fi
 
-		fnBUFFER INFO 1 "--------"
+		fnBUFFER INFO 2 "--------"
 done
 
 #echo -e "DEBUG: ${BUFFER_DEBUG}"

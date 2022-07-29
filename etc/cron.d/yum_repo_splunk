@@ -1,13 +1,13 @@
 ##----------------------------------------------------------
-## -v- Daily Splunk RPM Repo update each morning, with email report
+## -v- Daily Splunk RPM Repo update each morning
 ##----------------------------------------------------------
 # - After copying this file to /etc/cron.d/yum_repo_splunk, 
 # - set the selinux contexts, using:
 #   #chcon system_u:object_r:system_cron_spool_t:s0 /etc/cron.d/yum_repo_splunk
 ##----------------------------------------------------------
-0 3 * * * root /usr/local/bin/yum-repo-splunk-create-or-update.sh | mail -s "Splunk YUM Repo Update : $(hostname -f)" root
+0 3 * * * root /usr/local/bin/yum-repo-splunk-create-or-update.sh 
 ##----------------------------------------------------------
-## -^- Daily Splunk RPM Repo update each morning, with email report
+## -^- Daily Splunk RPM Repo update each morning
 ##----------------------------------------------------------
 
 

@@ -5,6 +5,12 @@
 
 PASSFILESPEC=~/.yum-repo-splunk
 
+#Set up for sending a summary email after processing:
+MAIL_ENABLED="true"
+#single-quoted template line, which will be eval echo ed to form final email subject. 
+MAIL_SUBJECT_TEMPLATE='[${STATUS_FINAL}] Splunk YUM Repo Update : $(hostname -f)'
+MAIL_TOADDR=root
+
 SYSLOGLEVEL=5
 #syslog severity levels borrowed from solarwinds list.
 #VALUE	SEVERITY	KEYWORD	DESCRIPTION
@@ -21,6 +27,9 @@ BUFFER_EMERG=""; BUFFER_ALERT=""; BUFFER_CRIT=""; BUFFER_ERROR=""; BUFFER_WARNIN
 #a separate buffer, to collect everything that needs to be summarized.
 BUFFER_SUMMARY=""
 BUFFER_SUMMARY_DETAIL=""
+
+#Keep a running tally of how many packages had to be downloaded.
+NEW_PKG_CT=0
 
 #For Username and Password, place those in a file at path ${PASSFILESPEC}
 #NOTE: For the SPLUNKUSER and SPLUNKPASS, use the ones that have been registered with www.splunk.com, to allow downloads of their packages:
@@ -153,12 +162,51 @@ fnCHECKUTIL "/usr/bin/sha512sum" "sha512sum" "#yum install coreutils"
 #check for curl:
 fnCHECKUTIL "/bin/curl" "curl" "#yum install curl"
 
+#check for mail:
+fnCHECKUTIL "/bin/mail" "mailx" "#yum install mailx"
+
 
 #declare an associative array where each key is the repo name/dir and the value is the url to download from:
 declare -A SPLUNK_RPM_HTTP_DL_URL
 SPLUNK_RPM_HTTP_DL_URL+=([splunk-enterprise]="https://www.splunk.com/en_us/download/splunk-enterprise.html#")
 SPLUNK_RPM_HTTP_DL_URL+=([splunk-universal-forwarder]="https://www.splunk.com/en_us/download/universal-forwarder.html#")
 
+
+
+
+#---------------------------------------
+#-v- function summarygen
+#---------------------------------------
+function summarygen() {
+	SUMMARY_LINE=$( eval echo "${MAIL_SUBJECT_TEMPLATE}" )
+	echo '----'
+	echo -e "${SUMMARY_LINE}"
+	echo '----'
+	echo -e "Summary:"
+	echo -e "${BUFFER_SUMMARY}"
+	echo '----'
+	echo -e "Summary Detail:"
+	echo -e "${BUFFER_SUMMARY_DETAIL}"
+	echo '----'
+}
+#---------------------------------------
+#-^- function summarygen
+#---------------------------------------
+
+#also export the function so that subshells can use it.
+export -f summarygen
+
+#---------------------------------------
+#-v- function mailout
+#---------------------------------------
+function mailout() {
+	MAIL_SUBJECT_FORMAT=$( eval echo "${MAIL_SUBJECT_TEMPLATE}" )
+	MAIL_BODY="$( summarygen )"
+	echo "${MAIL_BODY}" | mail -s "${MAIL_SUBJECT_FORMAT}" ${MAIL_TOADDR}
+}
+#---------------------------------------
+#-^- function mailout
+#---------------------------------------
 
 #---------------------------------------
 #-v- function finish
@@ -168,12 +216,7 @@ SPLUNK_RPM_HTTP_DL_URL+=([splunk-universal-forwarder]="https://www.splunk.com/en
 function finish() {
 	fnBUFFER DEBUG 0 "Cleanup: Deleting temp directory: ${SPLUNK_DL_TEMP_LOC}"
 	rmdir "${SPLUNK_DL_TEMP_LOC}"
-	echo '----'
-	echo -e "Summary:"
-	echo -e "${BUFFER_SUMMARY}"
-	echo '----'
-	echo -e "Summary Detail:"
-	echo -e "${BUFFER_SUMMARY_DETAIL}"
+	summarygen
 }
 #---------------------------------------
 #-^- function finish
@@ -220,6 +263,7 @@ function fnGetThePkg() {
 		fnBUFFER INFO 0 "${repo_name}: Moving file to final location: ${SPLUNK_REPO_PATH_BASE}/${repo_name}"
 		mv "${SPLUNK_DL_TEMP_LOC}/${dl_rpm_name}" "${SPLUNK_REPO_PATH_BASE}/${repo_name}"
 		fnBUFFER INFO 3 "${repo_name}: File Downloaded: ${checksum_local}"
+		let "NEW_PKG_CT+=1"
 		return 0
 	else
 		fnBUFFER ERROR 3 "${repo_name}: Downloaded file Checksum for : ${temp_fpspec} :: FAILED"
@@ -304,6 +348,7 @@ do
 	done
 
 
+
 	#process any files in the final repo location:
 	fnBUFFER INFO 0 "${repo_name}: Create Repo: Executing."
 	#create the yum repo metadata:
@@ -328,6 +373,19 @@ do
 
 		fnBUFFER INFO 2 "--------"
 done
+
+	#send a summary mail if enabled.
+	if [ "${MAIL_ENABLED}" ] ; then 
+	
+		if [ "${NEW_PKG_CT}" -gt 0 ] ; then
+			STATUS_FINAL="NEW: ${NEW_PKG_CT} PKGS"
+		else
+			STATUS_FINAL="UNCHANGED"
+		fi
+		#echo $( eval echo "${MAIL_SUBJECT_TEMPLATE}" )
+		MAIL_SUBJECT_FORMAT=$( eval echo "${MAIL_SUBJECT_TEMPLATE}" )
+		mailout
+	fi
 
 #echo -e "DEBUG: ${BUFFER_DEBUG}"
 #echo -e "INFO: ${BUFFER_INFO}"

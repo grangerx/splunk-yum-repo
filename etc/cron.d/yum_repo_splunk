@@ -5,6 +5,7 @@
 # - set the selinux contexts, using:
 #   #chcon system_u:object_r:system_cron_spool_t:s0 /etc/cron.d/yum_repo_splunk
 ##----------------------------------------------------------
+MAILTO=""
 0 3 * * * root /usr/local/bin/yum-repo-splunk-create-or-update.sh 
 ##----------------------------------------------------------
 ## -^- Daily Splunk RPM Repo update each morning

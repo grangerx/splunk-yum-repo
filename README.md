@@ -1,5 +1,5 @@
 # splunk-yum-repo
-Create an automatically updated local yum/dnf RPM repository for splunk-enterprise and splunk-universal-fowarder packages, allowing these packages to be kept up to date in your environment without having to check and download from splunk.com each time. 
+Create an automatically updated local yum/dnf RPM repository for splunk-enterprise and splunk-universal-fowarder RPM packages, allowing these packages to be kept up to date in your environment without having to check and download from splunk.com each time. 
 
 This repository contains scripts/cronjobs/repo-definitions to perform nightly downloads of splunk-universal-forwarder and splunk-enterprise packages and create/host a YUM repository.
 

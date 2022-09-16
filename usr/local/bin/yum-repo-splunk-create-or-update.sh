@@ -380,7 +380,7 @@ done
 		if [ "${NEW_PKG_CT}" -gt 0 ] ; then
 			STATUS_FINAL="NEW: ${NEW_PKG_CT} PKGS"
 		else
-			STATUS_FINAL="UNCHANGED"
+			STATUS_FINAL="NOCHG"
 		fi
 		#echo $( eval echo "${MAIL_SUBJECT_TEMPLATE}" )
 		MAIL_SUBJECT_FORMAT=$( eval echo "${MAIL_SUBJECT_TEMPLATE}" )

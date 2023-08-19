@@ -298,7 +298,6 @@ do
 	#get the content of the page of the url:
 	DL_PAGE_CONTENT=$( curl --user ${SPLUNKUSER}:${SPLUNKPASS} -s "${dl_url}" )
 
-
 	#parse the actual package(s) and checksum(s) download location(s) from the page content:
 	#use mapfile to read DL_LINKS and CHECKSUM_LINKS into arrays, with each element a line
 	mapfile -t DL_LINKS <<< "$(echo "${DL_PAGE_CONTENT}" | grep "data-file" | grep rpm | sed 's/.*data-link="\([^"]*\)".*/\1/g')"
@@ -357,6 +356,8 @@ do
 	fnBUFFER DEBUG 0 "${CREAREREPO_OUTPUT}"
 	fnBUFFER INFO 2 "${repo_name}: Create Repo: Finished."
 
+	#set up selinux security context:
+	chcon -R unconfined_u:object_r:usr_t:s0 "${repo_path}"
 
 	#if the repo file doesn't exist, create it:
 	if [ ! -f ${repo_config_fp_spec} ]; then
